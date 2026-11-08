@@ -73,6 +73,9 @@ class AppSettings extends Table {
 class AppDatabase extends _$AppDatabase {
   AppDatabase() : super(_openConnection());
 
+  /// Constructor for testing with a custom executor.
+  AppDatabase.forTesting(super.e);
+
   @override
   int get schemaVersion => 1;
 

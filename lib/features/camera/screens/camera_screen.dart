@@ -1,33 +1,109 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:phosphor_icons/phosphor_icons.dart';
 import '../../../core/design/tokens.dart';
+import '../../../data/providers/service_providers.dart';
 
 /// Full-bleed dark camera screen with viewfinder overlay.
-/// In M1 this is a visual stub; real capture comes in M2.
-class CameraScreen extends StatefulWidget {
+/// Tapping the shutter launches the native document scanner (ML Kit).
+class CameraScreen extends ConsumerStatefulWidget {
   const CameraScreen({super.key, this.mode = 'document'});
 
   final String mode; // 'document' or 'idcard'
 
   @override
-  State<CameraScreen> createState() => _CameraScreenState();
+  ConsumerState<CameraScreen> createState() => _CameraScreenState();
 }
 
-class _CameraScreenState extends State<CameraScreen> {
+class _CameraScreenState extends ConsumerState<CameraScreen>
+    with SingleTickerProviderStateMixin {
   bool _flashOn = false;
   String _currentMode = 'document';
+  bool _isScanning = false;
+  int _scannedPages = 0; // ignore: prefer_final_fields
+
+  late final AnimationController _pulseController;
 
   @override
   void initState() {
     super.initState();
     _currentMode = widget.mode;
-    // Force dark status bar for camera
+    _pulseController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1200),
+    )..repeat(reverse: true);
+
     SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
       statusBarBrightness: Brightness.dark,
       statusBarIconBrightness: Brightness.light,
       statusBarColor: Colors.transparent,
     ));
+  }
+
+  @override
+  void dispose() {
+    _pulseController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _startScan() async {
+    if (_isScanning) return;
+
+    setState(() => _isScanning = true);
+    HapticFeedback.mediumImpact();
+
+    try {
+      final scanner = ref.read(scannerServiceProvider);
+      final docId = await scanner.scanDocument(mode: _currentMode);
+
+      if (docId != null && mounted) {
+        // Navigate to editor with the new document
+        context.push('/editor?docId=$docId');
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              e.toString().contains('permission_denied')
+                  ? 'Camera permission required. Please enable it in Settings.'
+                  : 'Scan failed. Please try again.',
+            ),
+            action: SnackBarAction(
+              label: 'OK',
+              onPressed: () {},
+            ),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isScanning = false);
+    }
+  }
+
+  Future<void> _importFromGallery() async {
+    if (_isScanning) return;
+
+    setState(() => _isScanning = true);
+
+    try {
+      final scanner = ref.read(scannerServiceProvider);
+      final docId = await scanner.importFromGallery();
+
+      if (docId != null && mounted) {
+        context.push('/editor?docId=$docId');
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Import failed. Please try again.')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isScanning = false);
+    }
   }
 
   @override
@@ -47,6 +123,32 @@ class _CameraScreenState extends State<CameraScreen> {
             ),
           ),
 
+          // Scan-line animation when scanning
+          if (_isScanning)
+            AnimatedBuilder(
+              animation: _pulseController,
+              builder: (context, _) {
+                return Positioned(
+                  top: mq.size.height * 0.2 +
+                      (_pulseController.value * mq.size.height * 0.5),
+                  left: mq.size.width * 0.1,
+                  right: mq.size.width * 0.1,
+                  child: Container(
+                    height: 2,
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [
+                          Colors.transparent,
+                          const Color(0xFFE23B3B).withValues(alpha: 0.8),
+                          Colors.transparent,
+                        ],
+                      ),
+                    ),
+                  ),
+                );
+              },
+            ),
+
           // Top controls
           Positioned(
             top: mq.padding.top + Spacing.sm,
@@ -55,12 +157,10 @@ class _CameraScreenState extends State<CameraScreen> {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                // Close button
                 _CameraButton(
                   icon: PhosphorIconsRegular.x,
                   onTap: () => Navigator.of(context).pop(),
                 ),
-                // Flash toggle
                 _CameraButton(
                   icon: _flashOn
                       ? PhosphorIconsFill.lightning
@@ -72,16 +172,25 @@ class _CameraScreenState extends State<CameraScreen> {
             ),
           ),
 
-          // Viewfinder crop marks (center of screen)
+          // Viewfinder crop marks
           Center(
             child: AspectRatio(
               aspectRatio: _currentMode == 'idcard' ? 1.586 : 0.707,
               child: Container(
                 margin: const EdgeInsets.all(Spacing.xl),
-                child: CustomPaint(
-                  painter: _CropMarkOverlayPainter(
-                    color: const Color(0xFFE23B3B).withValues(alpha: 0.6),
-                  ),
+                child: AnimatedBuilder(
+                  animation: _pulseController,
+                  builder: (context, _) {
+                    return CustomPaint(
+                      painter: _CropMarkOverlayPainter(
+                        color: Color.lerp(
+                          const Color(0xFFE23B3B).withValues(alpha: 0.4),
+                          const Color(0xFFE23B3B).withValues(alpha: 0.8),
+                          _pulseController.value,
+                        )!,
+                      ),
+                    );
+                  },
                 ),
               ),
             ),
@@ -113,95 +222,125 @@ class _CameraScreenState extends State<CameraScreen> {
               ),
             ),
 
-          // Steady-hand hint
-          Positioned(
-            bottom: 160,
-            left: 0,
-            right: 0,
-            child: Center(
-              child: Text(
-                'Hold steady over the document',
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: Colors.white60,
-                    ),
-              ),
-            ),
-          ),
-
-          // Bottom controls
-          Positioned(
-            bottom: mq.padding.bottom + Spacing.lg,
-            left: 0,
-            right: 0,
-            child: Column(
-              children: [
-                // Mode selector
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
+          // Scanning indicator
+          if (_isScanning)
+            Center(
+              child: Container(
+                padding: const EdgeInsets.all(Spacing.lg),
+                decoration: BoxDecoration(
+                  color: Colors.black87,
+                  borderRadius: Radii.cardAll,
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    _ModeChip(
-                      label: 'Document',
-                      isSelected: _currentMode == 'document',
-                      onTap: () =>
-                          setState(() => _currentMode = 'document'),
+                    const SizedBox(
+                      width: 32,
+                      height: 32,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Color(0xFFE23B3B),
+                      ),
                     ),
-                    const SizedBox(width: Spacing.sm),
-                    _ModeChip(
-                      label: 'ID Card',
-                      isSelected: _currentMode == 'idcard',
-                      onTap: () =>
-                          setState(() => _currentMode = 'idcard'),
+                    const SizedBox(height: Spacing.md),
+                    Text(
+                      'Scanning…',
+                      style: Theme.of(context)
+                          .textTheme
+                          .bodyMedium
+                          ?.copyWith(color: Colors.white70),
                     ),
                   ],
                 ),
-                const SizedBox(height: Spacing.lg),
-                // Shutter row
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                  children: [
-                    // Gallery import
-                    _CameraButton(
-                      icon: PhosphorIconsRegular.image,
-                      onTap: () {
-                        // M2: import from gallery
-                      },
-                    ),
-                    // Shutter button
-                    GestureDetector(
-                      onTap: () {
-                        HapticFeedback.mediumImpact();
-                        // M2: capture
-                      },
-                      child: Container(
-                        width: 72,
-                        height: 72,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          border: Border.all(
-                            color: Colors.white,
-                            width: 3,
-                          ),
-                        ),
+              ),
+            ),
+
+          // Steady-hand hint
+          if (!_isScanning)
+            Positioned(
+              bottom: 160,
+              left: 0,
+              right: 0,
+              child: Center(
+                child: Text(
+                  'Tap the shutter to scan',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: Colors.white60,
+                      ),
+                ),
+              ),
+            ),
+
+          // Bottom controls
+          if (!_isScanning)
+            Positioned(
+              bottom: mq.padding.bottom + Spacing.lg,
+              left: 0,
+              right: 0,
+              child: Column(
+                children: [
+                  // Mode selector
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      _ModeChip(
+                        label: 'Document',
+                        isSelected: _currentMode == 'document',
+                        onTap: () =>
+                            setState(() => _currentMode = 'document'),
+                      ),
+                      const SizedBox(width: Spacing.sm),
+                      _ModeChip(
+                        label: 'ID Card',
+                        isSelected: _currentMode == 'idcard',
+                        onTap: () =>
+                            setState(() => _currentMode = 'idcard'),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: Spacing.lg),
+                  // Shutter row
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                    children: [
+                      // Gallery import
+                      _CameraButton(
+                        icon: PhosphorIconsRegular.image,
+                        onTap: _importFromGallery,
+                      ),
+                      // Shutter button
+                      GestureDetector(
+                        onTap: _startScan,
                         child: Container(
-                          margin: const EdgeInsets.all(4),
-                          decoration: const BoxDecoration(
+                          width: 72,
+                          height: 72,
+                          decoration: BoxDecoration(
                             shape: BoxShape.circle,
-                            color: Colors.white,
+                            border: Border.all(
+                              color: Colors.white,
+                              width: 3,
+                            ),
+                          ),
+                          child: Container(
+                            margin: const EdgeInsets.all(4),
+                            decoration: const BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: Colors.white,
+                            ),
                           ),
                         ),
                       ),
-                    ),
-                    // Page stack (batch indicator)
-                    _CameraButton(
-                      icon: PhosphorIconsRegular.stack,
-                      onTap: () {},
-                      badge: '0',
-                    ),
-                  ],
-                ),
-              ],
+                      // Page stack
+                      _CameraButton(
+                        icon: PhosphorIconsRegular.stack,
+                        onTap: () {},
+                        badge: '$_scannedPages',
+                      ),
+                    ],
+                  ),
+                ],
+              ),
             ),
-          ),
         ],
       ),
     );
@@ -238,7 +377,7 @@ class _CameraButton extends StatelessWidget {
           alignment: Alignment.center,
           children: [
             Icon(icon, color: Colors.white, size: 22),
-            if (badge != null)
+            if (badge != null && badge != '0')
               Positioned(
                 top: 4,
                 right: 4,
@@ -286,7 +425,8 @@ class _ModeChip extends StatelessWidget {
           vertical: Spacing.sm,
         ),
         decoration: BoxDecoration(
-          color: isSelected ? Colors.white.withValues(alpha: 0.15) : Colors.transparent,
+          color:
+              isSelected ? Colors.white.withValues(alpha: 0.15) : Colors.transparent,
           borderRadius: Radii.chipAll,
           border: Border.all(
             color: isSelected ? Colors.white30 : Colors.white12,
@@ -313,7 +453,6 @@ class _ViewfinderGridPainter extends CustomPainter {
       ..color = Colors.white.withValues(alpha: 0.03)
       ..strokeWidth = 0.5;
 
-    // Draw thirds
     for (var i = 1; i < 3; i++) {
       final y = size.height * i / 3;
       canvas.drawLine(Offset(0, y), Offset(size.width, y), paint);

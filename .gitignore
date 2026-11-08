@@ -4,8 +4,12 @@
 .flutter-plugins-dependencies
 .packages
 build/
-*.g.dart
+
+# Generated code (keep database.g.dart for Drift)
 *.freezed.dart
+# Note: database.g.dart is tracked because it's required for builds
+# Other .g.dart files are excluded
+# If you add more code generation, track those too
 
 # Pub
 pubspec.lock

@@ -1,12 +1,16 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:phosphor_icons/phosphor_icons.dart';
 import '../../../core/design/tokens.dart';
 import '../../../core/design/app_typography.dart';
 import '../../../data/database.dart';
+import '../../../data/providers/database_provider.dart';
 import 'package:intl/intl.dart';
 
 /// Document thumbnail card with crop-mark corners motif.
-class DocumentCard extends StatelessWidget {
+/// Shows real thumbnails when available.
+class DocumentCard extends ConsumerWidget {
   const DocumentCard({
     super.key,
     required this.document,
@@ -19,11 +23,44 @@ class DocumentCard extends StatelessWidget {
   final VoidCallback onTap;
 
   @override
-  Widget build(BuildContext context) {
-    return isGrid ? _buildGridCard(context) : _buildListTile(context);
+  Widget build(BuildContext context, WidgetRef ref) {
+    return isGrid ? _buildGridCard(context, ref) : _buildListTile(context, ref);
   }
 
-  Widget _buildGridCard(BuildContext context) {
+  Widget _buildThumbnail(BuildContext context, WidgetRef ref, {double? width, double? height}) {
+    final theme = Theme.of(context);
+    final db = ref.watch(databaseProvider);
+
+    return FutureBuilder<List<ScanPage>>(
+      future: db.getPagesForDocument(document.id),
+      builder: (context, snapshot) {
+        final pages = snapshot.data ?? [];
+        String? thumbPath;
+        if (pages.isNotEmpty) {
+          thumbPath = pages.first.thumbnailPath;
+        }
+
+        if (thumbPath != null && File(thumbPath).existsSync()) {
+          return Image.file(
+            File(thumbPath),
+            fit: BoxFit.cover,
+            width: width,
+            height: height,
+          );
+        }
+
+        return Center(
+          child: Icon(
+            PhosphorIconsRegular.fileText,
+            size: isGrid ? 40 : 24,
+            color: theme.colorScheme.outlineVariant,
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildGridCard(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final dateStr = DateFormat('d MMM').format(
       DateTime.fromMillisecondsSinceEpoch(document.updatedAt),
@@ -50,16 +87,9 @@ class DocumentCard extends StatelessWidget {
                 child: Stack(
                   fit: StackFit.expand,
                   children: [
-                    // Placeholder thumbnail
                     Container(
                       color: theme.colorScheme.surfaceContainerHighest,
-                      child: Center(
-                        child: Icon(
-                          PhosphorIconsRegular.fileText,
-                          size: 40,
-                          color: theme.colorScheme.outlineVariant,
-                        ),
-                      ),
+                      child: _buildThumbnail(context, ref),
                     ),
                     // Crop-mark corners overlay
                     CustomPaint(
@@ -130,7 +160,7 @@ class DocumentCard extends StatelessWidget {
     );
   }
 
-  Widget _buildListTile(BuildContext context) {
+  Widget _buildListTile(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final dateStr = DateFormat('d MMM yyyy').format(
       DateTime.fromMillisecondsSinceEpoch(document.updatedAt),
@@ -159,12 +189,9 @@ class DocumentCard extends StatelessWidget {
               ),
               child: Stack(
                 children: [
-                  Center(
-                    child: Icon(
-                      PhosphorIconsRegular.fileText,
-                      size: 24,
-                      color: theme.colorScheme.outlineVariant,
-                    ),
+                  ClipRRect(
+                    borderRadius: Radii.documentAll,
+                    child: _buildThumbnail(context, ref, width: 56, height: 72),
                   ),
                   CustomPaint(
                     size: const Size(56, 72),
