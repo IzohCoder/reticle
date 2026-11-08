@@ -1,0 +1,96 @@
+name: reticle
+description: Private, fast document scanner with on-device OCR.
+version: 1.0.0+1
+publish_to: 'none'
+
+environment:
+  sdk: '>=3.4.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # State management
+  flutter_riverpod: ^2.6.1
+
+  # Navigation
+  go_router: ^14.6.2
+
+  # Local database
+  drift: ^2.21.0
+  drift_flutter: ^0.2.2
+  sqlite3_flutter_libs: ^0.5.24
+
+  # IAP
+  purchases_flutter: ^8.2.2
+
+  # Ads (M3: google_mobile_ads deferred — AGP 9.x incompatibility)
+  # google_mobile_ads: ^5.2.0
+
+  # Utilities
+  shared_preferences: ^2.3.3
+  intl: ^0.19.0
+  share_plus: ^10.1.2
+  path_provider: ^2.1.5
+
+  # PDF generation (searchable PDFs with invisible text layer)
+  pdf: ^3.11.1
+  printing: ^5.14.1
+
+  # Camera & scanning
+  cunning_document_scanner: ^3.0.4
+  image_picker: ^1.1.2
+
+  # OCR
+  google_mlkit_text_recognition: ^0.14.0
+
+  # Image processing (filters, brightness, thumbnails)
+  image: ^4.3.0
+
+  # Permissions
+  permission_handler: ^12.0.3
+
+  # App lock (Pro)
+  local_auth: ^2.3.0
+
+  # Icons
+  phosphor_icons: ^3.0.1
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
+  build_runner: ^2.4.13
+  drift_dev: ^2.21.0
+
+flutter:
+  uses-material-design: true
+
+  assets:
+    - assets/fonts/
+
+  fonts:
+    - family: SpaceGrotesk
+      fonts:
+        - asset: assets/fonts/SpaceGrotesk-Regular.otf
+        - asset: assets/fonts/SpaceGrotesk-Medium.otf
+          weight: 500
+        - asset: assets/fonts/SpaceGrotesk-Bold.otf
+          weight: 700
+
+    - family: Inter
+      fonts:
+        - asset: assets/fonts/Inter-Regular.ttf
+        - asset: assets/fonts/Inter-Medium.ttf
+          weight: 500
+        - asset: assets/fonts/Inter-SemiBold.ttf
+          weight: 600
+        - asset: assets/fonts/Inter-Bold.ttf
+          weight: 700
+
+    # For PDF generation (Unicode coverage)
+    - family: NotoSans
+      fonts:
+        - asset: assets/fonts/NotoSans-Regular.ttf
+        - asset: assets/fonts/NotoSans-Bold.ttf
+          weight: 700
