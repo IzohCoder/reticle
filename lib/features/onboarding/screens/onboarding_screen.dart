@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:phosphor_icons/phosphor_icons.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/design/tokens.dart';
 import '../../../core/design/app_typography.dart';
 
@@ -18,6 +20,8 @@ class _OnboardingScreenState extends State<OnboardingScreen>
   late AnimationController _animCtrl;
   late Animation<double> _fadeIn;
   late Animation<double> _cropMarkScale;
+  bool _permissionDenied = false;
+  bool _permissionPermanentlyDenied = false;
 
   @override
   void initState() {
@@ -40,6 +44,32 @@ class _OnboardingScreenState extends State<OnboardingScreen>
   void dispose() {
     _animCtrl.dispose();
     super.dispose();
+  }
+
+  Future<void> _requestCameraAndProceed() async {
+    final status = await Permission.camera.request();
+
+    if (status.isGranted) {
+      await _markOnboardingComplete();
+      if (mounted) context.go('/library');
+    } else if (status.isPermanentlyDenied) {
+      setState(() {
+        _permissionDenied = true;
+        _permissionPermanentlyDenied = true;
+      });
+    } else {
+      setState(() => _permissionDenied = true);
+    }
+  }
+
+  Future<void> _skipAndProceed() async {
+    await _markOnboardingComplete();
+    if (mounted) context.go('/library');
+  }
+
+  Future<void> _markOnboardingComplete() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('onboarding_complete', true);
   }
 
   @override
@@ -111,7 +141,9 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                     color: Colors.white.withValues(alpha: 0.05),
                     borderRadius: Radii.cardAll,
                     border: Border.all(
-                      color: Colors.white.withValues(alpha: 0.08),
+                      color: _permissionDenied
+                          ? const Color(0xFFE23B3B).withValues(alpha: 0.3)
+                          : Colors.white.withValues(alpha: 0.08),
                     ),
                   ),
                   child: Row(
@@ -135,15 +167,21 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              'Camera access needed',
+                              _permissionDenied
+                                  ? 'Camera access denied'
+                                  : 'Camera access needed',
                               style: theme.textTheme.titleSmall?.copyWith(
                                 color: Colors.white,
                               ),
                             ),
                             const SizedBox(height: 2),
                             Text(
-                              'Reticle uses your camera to capture documents. '
-                              'Images are processed on your device and never uploaded.',
+                              _permissionPermanentlyDenied
+                                  ? 'Please enable camera access in your device Settings to scan documents.'
+                                  : _permissionDenied
+                                      ? 'Camera access is required to scan documents. You can still import from gallery without it.'
+                                      : 'Reticle uses your camera to capture documents. '
+                                          'Images are processed on your device and never uploaded.',
                               style: theme.textTheme.bodySmall?.copyWith(
                                 color: Colors.white54,
                                 height: 1.4,
@@ -164,11 +202,9 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                 width: double.infinity,
                 height: 52,
                 child: ElevatedButton(
-                  onPressed: () {
-                    // M3: request camera permission via permission_handler
-                    // For now, just navigate to library
-                    context.go('/library');
-                  },
+                  onPressed: _permissionPermanentlyDenied
+                      ? () => openAppSettings()
+                      : _requestCameraAndProceed,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFFE23B3B),
                     foregroundColor: Colors.white,
@@ -176,9 +212,11 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                       borderRadius: Radii.buttonAll,
                     ),
                   ),
-                  child: const Text(
-                    'Get Started',
-                    style: TextStyle(
+                  child: Text(
+                    _permissionPermanentlyDenied
+                        ? 'Open Settings'
+                        : 'Get Started',
+                    style: const TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.w600,
                     ),
@@ -186,7 +224,21 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                 ),
               ),
 
-              const SizedBox(height: Spacing.md),
+              if (_permissionDenied) ...[
+                const SizedBox(height: Spacing.sm),
+                TextButton(
+                  onPressed: _skipAndProceed,
+                  child: Text(
+                    'Continue without camera',
+                    style: TextStyle(
+                      color: Colors.white.withValues(alpha: 0.5),
+                      fontSize: 14,
+                    ),
+                  ),
+                ),
+              ],
+
+              if (!_permissionDenied) const SizedBox(height: Spacing.md),
 
               Text(
                 'No account required · Everything stays on your phone',
@@ -225,7 +277,6 @@ class _OnboardingCropMarkPainter extends CustomPainter {
     final h = size.height;
     const l = 28.0;
 
-    // Outer crop marks (subtle)
     // Top-left
     canvas.drawLine(const Offset(0, 0), Offset(l, 0), subtlePaint);
     canvas.drawLine(const Offset(0, 0), Offset(0, l), subtlePaint);
@@ -239,7 +290,7 @@ class _OnboardingCropMarkPainter extends CustomPainter {
     canvas.drawLine(Offset(w, h), Offset(w - l, h), accentPaint);
     canvas.drawLine(Offset(w, h), Offset(w, h - l), accentPaint);
 
-    // Inner page fold triangle (lifted corner)
+    // Inner page fold triangle
     final foldPath = Path()
       ..moveTo(w - 20, h)
       ..lineTo(w, h - 20)

@@ -6,6 +6,7 @@ import '../../../core/design/tokens.dart';
 import '../../../core/design/app_typography.dart';
 import '../../../data/providers/database_provider.dart';
 import '../../../data/database.dart';
+import '../../../services/admob_service.dart';
 import '../widgets/document_card.dart';
 import '../widgets/folder_chip_bar.dart';
 
@@ -110,13 +111,19 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
           // Folder chips
           foldersAsync.when(
             data: (folders) => folders.isEmpty
-                ? const SizedBox.shrink()
+                ? FolderChipBar(
+                    folders: const [],
+                    selectedId: null,
+                    onSelected: (_) {},
+                    db: ref.read(databaseProvider),
+                  )
                 : FolderChipBar(
                     folders: folders,
                     selectedId: selectedFolder,
                     onSelected: (id) => ref
                         .read(selectedFolderProvider.notifier)
                         .state = id,
+                    db: ref.read(databaseProvider),
                   ),
             loading: () => const SizedBox(height: 48),
             error: (_, __) => const SizedBox.shrink(),
@@ -160,6 +167,9 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
               ),
             ),
           ),
+
+          // Banner ad — library only, NEVER on camera/editor/export
+          const AppBannerAd(),
         ],
       ),
     );

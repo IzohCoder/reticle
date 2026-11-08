@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Reticle adaptive icon foreground: crop-mark corners + lifted corner fold -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- Top-left crop mark (subtle white) -->
+    <path
+        android:pathData="M30,30 L30,46"
+        android:strokeWidth="2.5"
+        android:strokeColor="#99FFFFFF"
+        android:fillColor="#00000000"
+        android:strokeLineCap="square" />
+    <path
+        android:pathData="M30,30 L46,30"
+        android:strokeWidth="2.5"
+        android:strokeColor="#99FFFFFF"
+        android:fillColor="#00000000"
+        android:strokeLineCap="square" />
+
+    <!-- Top-right crop mark (subtle white) -->
+    <path
+        android:pathData="M78,30 L78,46"
+        android:strokeWidth="2.5"
+        android:strokeColor="#99FFFFFF"
+        android:fillColor="#00000000"
+        android:strokeLineCap="square" />
+    <path
+        android:pathData="M78,30 L62,30"
+        android:strokeWidth="2.5"
+        android:strokeColor="#99FFFFFF"
+        android:fillColor="#00000000"
+        android:strokeLineCap="square" />
+
+    <!-- Bottom-left crop mark (subtle white) -->
+    <path
+        android:pathData="M30,78 L30,62"
+        android:strokeWidth="2.5"
+        android:strokeColor="#99FFFFFF"
+        android:fillColor="#00000000"
+        android:strokeLineCap="square" />
+    <path
+        android:pathData="M30,78 L46,78"
+        android:strokeWidth="2.5"
+        android:strokeColor="#99FFFFFF"
+        android:fillColor="#00000000"
+        android:strokeLineCap="square" />
+
+    <!-- Bottom-right crop mark (Signal Red) -->
+    <path
+        android:pathData="M78,78 L78,62"
+        android:strokeWidth="2.5"
+        android:strokeColor="#FFE23B3B"
+        android:fillColor="#00000000"
+        android:strokeLineCap="square" />
+    <path
+        android:pathData="M78,78 L62,78"
+        android:strokeWidth="2.5"
+        android:strokeColor="#FFE23B3B"
+        android:fillColor="#00000000"
+        android:strokeLineCap="square" />
+
+    <!-- Lifted corner fold triangle (Signal Red, semi-transparent fill) -->
+    <path
+        android:pathData="M66,78 L78,66 L78,78 Z"
+        android:fillColor="#40E23B3B" />
+
+    <!-- Center crosshair dot (subtle) -->
+    <path
+        android:pathData="M54,52 A2,2 0 1,1 54,56 A2,2 0 1,1 54,52"
+        android:fillColor="#66FFFFFF" />
+</vector>

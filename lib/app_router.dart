@@ -1,12 +1,15 @@
 import 'package:go_router/go_router.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
+import 'config/app_config.dart';
 import 'features/library/screens/library_screen.dart';
 import 'features/camera/screens/camera_screen.dart';
 import 'features/editor/screens/editor_screen.dart';
 import 'features/document/screens/document_detail_screen.dart';
 import 'features/ocr/screens/ocr_text_screen.dart';
 import 'features/settings/screens/settings_screen.dart';
+import 'features/settings/screens/storage_screen.dart';
 import 'features/onboarding/screens/onboarding_screen.dart';
 import 'features/paywall/paywall_screen.dart';
 import 'core/widgets/scan_shell.dart';
@@ -22,16 +25,39 @@ abstract final class AppRoutes {
   static const String documentDetail = '/library/:id';
   static const String ocrText = '/library/:id/ocr';
   static const String settings = '/settings';
+  static const String storage = '/settings/storage';
   static const String paywall = '/paywall';
 }
+
+// ---------------------------------------------------------------------------
+// Onboarding state — loaded once at router construction
+// ---------------------------------------------------------------------------
+final _onboardingCompleteProvider = FutureProvider<bool>((ref) async {
+  if (!enableOnboarding) return true;
+  final prefs = await SharedPreferences.getInstance();
+  return prefs.getBool('onboarding_complete') ?? false;
+});
 
 // ---------------------------------------------------------------------------
 // Router
 // ---------------------------------------------------------------------------
 final routerProvider = Provider<GoRouter>((ref) {
+  // Watch onboarding state so redirect re-evaluates after it changes.
+  final onboardingDone = ref.watch(_onboardingCompleteProvider).valueOrNull ?? false;
+
   return GoRouter(
     initialLocation: AppRoutes.library,
     debugLogDiagnostics: false,
+    redirect: (context, state) {
+      final goingTo = state.matchedLocation;
+      if (!onboardingDone && goingTo != AppRoutes.onboarding) {
+        return AppRoutes.onboarding;
+      }
+      if (onboardingDone && goingTo == AppRoutes.onboarding) {
+        return AppRoutes.library;
+      }
+      return null;
+    },
     routes: [
       GoRoute(
         path: AppRoutes.onboarding,
@@ -103,6 +129,10 @@ final routerProvider = Provider<GoRouter>((ref) {
         builder: (_, state) => PaywallScreen(
           reason: state.uri.queryParameters['reason'],
         ),
+      ),
+      GoRoute(
+        path: AppRoutes.storage,
+        builder: (_, __) => const StorageScreen(),
       ),
     ],
   );

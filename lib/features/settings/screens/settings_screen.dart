@@ -2,9 +2,23 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:phosphor_icons/phosphor_icons.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../../config/app_config.dart';
 import '../../../core/design/tokens.dart';
 import '../../../core/design/app_typography.dart';
+import '../../../data/providers/database_provider.dart';
+
+/// Riverpod provider that reads the default filter from DB settings.
+final defaultFilterProvider = FutureProvider<String>((ref) async {
+  final db = ref.watch(databaseProvider);
+  return await db.getSetting('default_filter') ?? 'original';
+});
+
+/// Riverpod provider that reads the export quality from DB settings.
+final exportQualityProvider = FutureProvider<String>((ref) async {
+  final db = ref.watch(databaseProvider);
+  return await db.getSetting('export_quality') ?? 'balanced';
+});
 
 class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
@@ -12,6 +26,8 @@ class SettingsScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
+    final defaultFilter = ref.watch(defaultFilterProvider).valueOrNull ?? 'original';
+    final exportQuality = ref.watch(exportQualityProvider).valueOrNull ?? 'balanced';
 
     return Scaffold(
       appBar: AppBar(
@@ -37,14 +53,14 @@ class SettingsScreen extends ConsumerWidget {
           _SettingsTile(
             icon: PhosphorIconsRegular.funnel,
             title: 'Default filter',
-            subtitle: 'Original',
-            onTap: () {},
+            subtitle: _filterLabel(defaultFilter),
+            onTap: () => _showFilterPicker(context, ref, defaultFilter),
           ),
           _SettingsTile(
             icon: PhosphorIconsRegular.fileArrowDown,
             title: 'Export quality',
-            subtitle: 'Balanced',
-            onTap: () {},
+            subtitle: _qualityLabel(exportQuality),
+            onTap: () => _showQualityPicker(context, ref, exportQuality),
           ),
 
           const SizedBox(height: Spacing.sm),
@@ -55,7 +71,7 @@ class SettingsScreen extends ConsumerWidget {
             icon: PhosphorIconsRegular.hardDrives,
             title: 'Storage usage',
             subtitle: 'Manage scanned documents',
-            onTap: () {},
+            onTap: () => context.push('/settings/storage'),
           ),
 
           const SizedBox(height: Spacing.sm),
@@ -81,12 +97,12 @@ class SettingsScreen extends ConsumerWidget {
           _SettingsTile(
             icon: PhosphorIconsRegular.shieldCheck,
             title: 'Privacy policy',
-            onTap: () {},
+            onTap: () => _openUrl(appPrivacyPolicyUrl),
           ),
           _SettingsTile(
             icon: PhosphorIconsRegular.fileText,
             title: 'Terms of service',
-            onTap: () {},
+            onTap: () => _openUrl(appTermsUrl),
           ),
           _SettingsTile(
             icon: PhosphorIconsRegular.arrowsClockwise,
@@ -100,7 +116,7 @@ class SettingsScreen extends ConsumerWidget {
           _SettingsTile(
             icon: PhosphorIconsRegular.star,
             title: 'Rate Reticle',
-            onTap: () {},
+            onTap: () => _openUrl(appPlayStoreUrl),
           ),
           Padding(
             padding: const EdgeInsets.all(Spacing.lg),
@@ -115,7 +131,163 @@ class SettingsScreen extends ConsumerWidget {
       ),
     );
   }
+
+  // ---------------------------------------------------------------------------
+  // Filter picker bottom sheet
+  // ---------------------------------------------------------------------------
+  String _filterLabel(String key) => switch (key) {
+        'enhanced' => 'Enhanced',
+        'bw' => 'Black & White',
+        'grayscale' => 'Grayscale',
+        'blueprint' => 'Blueprint',
+        _ => 'Original',
+      };
+
+  void _showFilterPicker(BuildContext context, WidgetRef ref, String current) {
+    final filters = ['original', 'enhanced', 'bw', 'grayscale', 'blueprint'];
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (ctx) {
+        final theme = Theme.of(ctx);
+        return Padding(
+          padding: EdgeInsets.only(
+            left: Spacing.lg,
+            right: Spacing.lg,
+            top: Spacing.md,
+            bottom: MediaQuery.of(ctx).padding.bottom + Spacing.lg,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Center(
+                child: Container(
+                  width: 32, height: 4,
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.outlineVariant,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              const SizedBox(height: Spacing.md),
+              Text('Default Filter', style: theme.textTheme.titleMedium),
+              const SizedBox(height: Spacing.sm),
+              ...filters.map((f) => ListTile(
+                    title: Text(_filterLabel(f)),
+                    leading: Radio<String>(
+                      value: f,
+                      groupValue: current,
+                      activeColor: theme.colorScheme.primary,
+                      onChanged: (v) async {
+                        if (v != null) {
+                          final db = ref.read(databaseProvider);
+                          await db.setSetting('default_filter', v);
+                          ref.invalidate(defaultFilterProvider);
+                        }
+                        if (ctx.mounted) Navigator.pop(ctx);
+                      },
+                    ),
+                    onTap: () async {
+                      final db = ref.read(databaseProvider);
+                      await db.setSetting('default_filter', f);
+                      ref.invalidate(defaultFilterProvider);
+                      if (ctx.mounted) Navigator.pop(ctx);
+                    },
+                  )),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // Quality picker bottom sheet
+  // ---------------------------------------------------------------------------
+  String _qualityLabel(String key) => switch (key) {
+        'small' => 'Small (~150 KB/page)',
+        'high' => 'High (~600 KB/page)',
+        _ => 'Balanced (~300 KB/page)',
+      };
+
+  void _showQualityPicker(BuildContext context, WidgetRef ref, String current) {
+    final qualities = ['small', 'balanced', 'high'];
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (ctx) {
+        final theme = Theme.of(ctx);
+        return Padding(
+          padding: EdgeInsets.only(
+            left: Spacing.lg,
+            right: Spacing.lg,
+            top: Spacing.md,
+            bottom: MediaQuery.of(ctx).padding.bottom + Spacing.lg,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Center(
+                child: Container(
+                  width: 32, height: 4,
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.outlineVariant,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              const SizedBox(height: Spacing.md),
+              Text('Export Quality', style: theme.textTheme.titleMedium),
+              const SizedBox(height: Spacing.sm),
+              ...qualities.map((q) => ListTile(
+                    title: Text(_qualityLabel(q)),
+                    leading: Radio<String>(
+                      value: q,
+                      groupValue: current,
+                      activeColor: theme.colorScheme.primary,
+                      onChanged: (v) async {
+                        if (v != null) {
+                          final db = ref.read(databaseProvider);
+                          await db.setSetting('export_quality', v);
+                          ref.invalidate(exportQualityProvider);
+                        }
+                        if (ctx.mounted) Navigator.pop(ctx);
+                      },
+                    ),
+                    onTap: () async {
+                      final db = ref.read(databaseProvider);
+                      await db.setSetting('export_quality', q);
+                      ref.invalidate(exportQualityProvider);
+                      if (ctx.mounted) Navigator.pop(ctx);
+                    },
+                  )),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // URL launcher
+  // ---------------------------------------------------------------------------
+  Future<void> _openUrl(String url) async {
+    final uri = Uri.parse(url);
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    }
+  }
 }
+
+// ---------------------------------------------------------------------------
+// Reusable widgets
+// ---------------------------------------------------------------------------
 
 class _SectionHeader extends StatelessWidget {
   const _SectionHeader({required this.title});
